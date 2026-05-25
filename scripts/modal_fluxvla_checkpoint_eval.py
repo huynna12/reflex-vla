@@ -422,9 +422,8 @@ def run_fluxvla_libero_eval(
     if not Path(EXPORTED_ONNX_DIR + "/vlm_prefix.onnx").exists():
         from reflex.exporters.decomposed import export_pi05_decomposed
         export_pi05_decomposed(
-            model_id="lerobot/pi05_base",
+            model_id=converted_dir,
             output_dir=EXPORTED_ONNX_DIR,
-            student_checkpoint=converted_dir,
             target="desktop",
             num_steps=10,
         )
