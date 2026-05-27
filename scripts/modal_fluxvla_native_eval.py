@@ -81,7 +81,7 @@ image = (
         "safetensors>=0.4.0",
         "huggingface_hub",
         "transformers==4.53.2",
-        "numpy",
+        "numpy<2",
         "Pillow",
         "pydantic>=2.0",
         "pyyaml",
