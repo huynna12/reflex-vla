@@ -122,6 +122,8 @@ image = (
         "boto3",
         "botocore",
         "gcsfs",
+        "types-boto3-s3",
+        "tensorflow-graphics",
     )
     .run_commands(
         "pip install tensorflow-datasets tensorflow-graphics"
