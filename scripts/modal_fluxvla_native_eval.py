@@ -124,27 +124,22 @@ image = (
         "pip install tensorflow-datasets tensorflow-graphics"
         " && pip install --no-deps dlimp@git+https://github.com/kvablack/dlimp"
     )
-    .add_local_file("scripts/mock_flash_attn.py", "/root/mock_flash_attn.py", copy=True)
-    .run_commands("python /root/mock_flash_attn.py")
-    # Clone + patch LIBERO (same as modal_fluxvla_checkpoint_eval.py)
+    # Clone + patch LIBERO
     .run_commands(
         "git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git /opt/LIBERO"
         " && cd /opt/LIBERO && pip install . --no-deps"
     )
     .add_local_file("scripts/patch_libero.py", "/root/patch_libero.py", copy=True)
     .run_commands("python /root/patch_libero.py")
-    # Mount FluxVLA source and install WITHOUT building CUDA extensions.
-    # We only need PI05FlowMatching (pure PyTorch), not PI05FlowMatchingInference
-    # (which requires custom Triton/CUDA kernels).
+    # Mount FluxVLA source (PYTHONPATH handles imports, no pip install needed)
     .add_local_dir(
         os.path.join(REPO_ROOT, "reference", "FluxVLA"),
         remote_path=FLUXVLA_SRC,
         copy=True,
     )
-    # No pip install needed — PYTHONPATH includes FLUXVLA_SRC (set in .env below).
-    # FluxVLA's setup.py imports torch at top level which isn't available during
-    # image build, and editable installs fail on Modal's pip version. PYTHONPATH
-    # is sufficient since we only need the Python modules, not the CUDA extensions.
+    # Stub flash_attn + FluxVLA CUDA extensions AFTER source is mounted
+    .add_local_file("scripts/mock_flash_attn.py", "/root/mock_flash_attn.py", copy=True)
+    .run_commands("python /root/mock_flash_attn.py")
     .env({
         "HF_HOME": HF_CACHE_PATH,
         "TRANSFORMERS_CACHE": f"{HF_CACHE_PATH}/transformers",
