@@ -322,8 +322,10 @@ def _convert_fluxvla_to_lerobot(
             renamed[expert_lm_head] = renamed[expert_embed].clone()
             logging.info("Added expert lm_head weight")
 
-        logging.info("After rename: %d entries", len(renamed))
-        save_file(renamed, str(output / "model.safetensors"))
+        # PI05Policy.from_pretrained expects model. prefix on all keys
+        prefixed = {f"model.{k}": v for k, v in renamed.items()}
+        logging.info("After rename + model. prefix: %d entries", len(prefixed))
+        save_file(prefixed, str(output / "model.safetensors"))
         (output / ".v3_converted").touch()
     else:
         logging.info("Weights already converted at %s", output)
