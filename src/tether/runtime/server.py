@@ -19,6 +19,7 @@ Then from robot:
 from __future__ import annotations
 
 import base64
+import contextvars
 import hashlib
 import inspect
 import io
@@ -43,6 +44,7 @@ from .record import (
     compute_config_hash,
     compute_model_hash,
 )
+from .auth import generate_request_id
 from .tracing import get_tracer, setup_tracing, shutdown_tracing
 
 # Optional Prometheus metrics — gated on the [serve] extra (prometheus-client).
@@ -78,6 +80,12 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 _tracer = get_tracer(__name__)
+REQUEST_ID_HEADER = "X-Tether-Request-ID"
+REQUEST_ID_ALIASES = (REQUEST_ID_HEADER, "X-Request-ID")
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "tether_request_id",
+    default="",
+)
 
 try:
     from tether import __version__ as _TETHER_VERSION
@@ -95,6 +103,16 @@ def _coerce_optional_float(value: Any) -> float | None:
     if not np.isfinite(out):
         return None
     return out
+
+
+def _resolve_http_request_id(request: Any) -> str:
+    for header in REQUEST_ID_ALIASES:
+        value = request.headers.get(header)
+        if value:
+            value = value.strip()
+            if value:
+                return value[:128]
+    return generate_request_id()
 
 
 def _call_accepts_keyword(fn: Any, keyword: str) -> bool:
@@ -3014,6 +3032,18 @@ def create_app(
         lifespan=lifespan,
     )
 
+    @app.middleware("http")
+    async def _request_id_middleware(request, call_next):
+        req_id = _resolve_http_request_id(request)
+        request.state.request_id = req_id
+        token = _request_id_var.set(req_id)
+        try:
+            response = await call_next(request)
+        finally:
+            _request_id_var.reset(token)
+        response.headers[REQUEST_ID_HEADER] = req_id
+        return response
+
     # Bearer auth dependency (Phase 1 auth-bearer feature).
     # If api_key is set at app-creation time, every protected route requires
     # the caller to pass `Authorization: Bearer <token>` (preferred) OR the
@@ -3108,6 +3138,9 @@ def create_app(
             # Non-standard attrs under gen_ai.action.* — proposed for upstream
             # OTel GenAI working group contribution (Phase 2 per spec).
             span.set_attribute("gen_ai.action.embodiment", _emb_label)
+            _req_id = _request_id_var.get()
+            if _req_id:
+                span.set_attribute("tether.request_id", _req_id)
             # chunk_size + denoise_steps are set AFTER predict returns (we don't
             # know them until the result is in hand). See ~line 1590 below.
             span.set_attribute(
